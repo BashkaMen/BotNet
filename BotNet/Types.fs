@@ -5,16 +5,19 @@ open System.Collections.Generic
 open System.Threading.Tasks
 
 
+
 type ReplyButton = { Text: string; Callback: unit -> ValueTask<IChatState> }
 
 and IChatState =
     abstract GetView : unit -> View seq
-    
+
 
 and View =
     | TextMessage of string
     | ReplyMessage of string * ReplyButton list
-    | TextReceiver of (string -> ValueTask<IChatState>)
+    | TextHandler of (string -> ValueTask<IChatState>)
+    | ContactHandler of (string -> ValueTask<IChatState>)
+    
     static member Text txt = TextMessage txt
     static member Buttons(message, keyboard: Dictionary<string, Func<ValueTask<IChatState>>>) =
         keyboard
@@ -22,38 +25,48 @@ and View =
         |> Seq.toList
         |> fun keyboard -> ReplyMessage(message, keyboard)
         
-    static member TextHandler (handler: Func<string, ValueTask<IChatState>>) =
-        TextReceiver handler.Invoke
+    static member TextHook (handler: Func<string, ValueTask<IChatState>>) =
+        TextHandler handler.Invoke
         
-    static member TextHandler (handler: Func<string, IChatState>) =
-        TextReceiver (fun txt -> ValueTask.FromResult(handler.Invoke(txt)))
+    static member TextHook (handler: Func<string, IChatState>) =
+        TextHandler (fun txt -> ValueTask.FromResult(handler.Invoke(txt)))
+        
+    static member ContactHook (handler: Func<string, ValueTask<IChatState>>) =
+        ContactHandler handler.Invoke
+        
+    static member ContactHook (handler: Func<string, IChatState>) =
+        ContactHandler (fun txt -> ValueTask.FromResult(handler.Invoke(txt)))
+   
     
 
 module View =
     let text txt = TextMessage txt  
     let buttons message keyboard = ReplyMessage(message, keyboard)
-    let textHandler handler = TextReceiver handler
+    let textHandler handler = TextHandler handler
     
 
-    let getTextHandler views =
-        views
+    let getTextHandler view =
+        view
         |> Seq.choose ^ function
-            | TextReceiver f -> Some f
+            | TextHandler f -> Some f
             | _ -> None
         |> Seq.tryHead
          
-    let getButtons views =
-        views
+    let getButtons view =
+        view
         |> Seq.choose ^ function
             | ReplyMessage (txt, buttons) -> Some buttons
             | _ -> None
         |> Seq.collect id
         |> Seq.toArray
         
-    let render (renderer: View -> Task) (views: View seq) : Task = task {
-        for view in views do
-            do! renderer view
-    } 
+    
+    let getContactHandler view =
+        view
+        |> Seq.choose ^ function
+            | ContactHandler f -> Some f
+            | _ -> None
+        |> Seq.tryHead
     
 
 

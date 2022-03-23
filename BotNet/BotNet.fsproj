@@ -8,8 +8,8 @@
     <ItemGroup>
         <Compile Include="Prelude.fs" />
         <Compile Include="Types.fs" />
-        <Compile Include="Store.fs" />
         <Compile Include="BotProcessor.fs" />
+        <Compile Include="Store.fs" />
     </ItemGroup>
 
     <ItemGroup>

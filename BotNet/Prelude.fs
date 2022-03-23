@@ -23,3 +23,10 @@ module Prelude
             match Int32.TryParse(s) with
             | true, s -> Some s
             | false, _ -> None
+            
+    
+    module Task =
+        let inline ignore (t: Task<'a>) = task {
+            let! _ = t
+            return ()
+        }
