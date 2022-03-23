@@ -44,13 +44,19 @@ module View =
     let buttons message keyboard = ReplyMessage(message, keyboard)
     let textHandler handler = TextHandler handler
     
+    
+    let private findFirst chooser = Seq.choose chooser >> Seq.tryHead 
 
-    let getTextHandler view =
-        view
-        |> Seq.choose ^ function
-            | TextHandler f -> Some f
-            | _ -> None
-        |> Seq.tryHead
+    let getTextHandler view = view |> findFirst ^ function
+        | TextHandler f -> Some f
+        | _ -> None
+        
+        
+        
+    let getContactHandler view = view |> findFirst ^ function
+        | ContactHandler f -> Some f
+        | _ -> None
+        
          
     let getButtons view =
         view
@@ -58,15 +64,10 @@ module View =
             | ReplyMessage (txt, buttons) -> Some buttons
             | _ -> None
         |> Seq.collect id
-        |> Seq.toArray
+        |> Seq.toList
         
     
-    let getContactHandler view =
-        view
-        |> Seq.choose ^ function
-            | ContactHandler f -> Some f
-            | _ -> None
-        |> Seq.tryHead
+    
     
 
 

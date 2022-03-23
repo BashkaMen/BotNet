@@ -45,9 +45,9 @@ namespace BotHost
         [STAThread]
         public static void Main()
         {
-            var telegram = new TelegramBotClient(Environment.GetEnvironmentVariable("TG_TOKEN"));
+            var telegram = new TelegramBotClient(Environment.GetEnvironmentVariable("TG_TOKEN")!);
             
-            var (save, getState) = Store.inMemory(new Dictionary<ChatId, IChatState>());
+            var (saveState, getState) = Store.inMemory(new Dictionary<ChatId, IChatState>());
             var viewAdapter = TelegramAdapter.view(telegram);
             var updateAdapter = TelegramAdapter.update;
             var initState = new CounterState();
@@ -55,9 +55,9 @@ namespace BotHost
             telegram.StartReceiving(
                 async (bot, update, token) =>
                 {
-                    await BotProcessor.handleUpdate(save, getState, viewAdapter, updateAdapter, initState, update);
+                    await BotProcessor.handleUpdate(saveState, getState, viewAdapter, updateAdapter, initState, update);
                 },
-                async (bot, ex, token) => { });
+                (bot, ex, token) => Task.CompletedTask);
 
             Console.WriteLine("Bot started");
             Console.ReadLine();
