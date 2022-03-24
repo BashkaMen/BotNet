@@ -1,13 +1,9 @@
 namespace BotNet
 
+open System.Threading
 open System.Threading.Tasks
 open BotNet
-open Telegram.Bot
-open Telegram.Bot.Types
-open Telegram.Bot.Types.Enums
-open Telegram.Bot.Types.ReplyMarkups
 
-[<Struct>] type ChatId = ChatId of string
 
 
 type ChatUpdate =
@@ -19,8 +15,24 @@ type ChatUpdate =
 type SaveChatState = SaveChatState of (ChatId -> IChatState -> Task)
 type GetChatState = GetChatState of  (ChatId -> Task<IChatState option>)
 type ViewAdapter = ViewAdapter of (ChatId -> View seq -> Task)
-type UpdateAdapter<'update> = UpdateAdapter of ('update -> Option<ChatId * ChatUpdate>)  
+type UpdateAdapter<'update> = UpdateAdapter of ('update -> Option<Chat * ChatUpdate>)  
 
+
+module Hook =
+    type private ChatContext = {
+        Chat: Chat
+    }
+    
+    let private context = AsyncLocal<ChatContext>()
+    
+    let setContext chat =
+        context.Value <- {
+            Chat = chat
+        }
+        
+    
+    [<CompiledName "UseChat">]
+    let useChat() = context.Value.Chat 
 
 
 module BotProcessor =
@@ -34,12 +46,14 @@ module BotProcessor =
         
         match mapUpdate update with
         | None -> return ()
-        | Some (chatId, update) -> 
+        | Some (chat, update) ->
+            
+        Hook.setContext chat
         
-        let render = adaptView chatId
-        let save = save chatId
+        let render = adaptView chat.Id
+        let save = save chat.Id
         
-        let! state = getState chatId <?!> initState 
+        let! state = getState chat.Id <?!> initState 
         let view = state.GetView()
 
         
