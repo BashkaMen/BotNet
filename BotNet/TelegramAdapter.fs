@@ -5,6 +5,7 @@ open BotNet
 open Telegram.Bot
 open Telegram.Bot.Types.Enums
 open Telegram.Bot.Types.ReplyMarkups
+open System.Threading.Tasks
 
 
 let view (client: ITelegramBotClient) = ViewAdapter ^ fun (ChatId chatId) views -> task {
@@ -17,6 +18,10 @@ let view (client: ITelegramBotClient) = ViewAdapter ^ fun (ChatId chatId) views 
     for view in views do
         match view with
         | EmptyView -> ()
+        | TypingView delay ->
+            do! client.SendChatActionAsync(chatId, ChatAction.Typing)
+            do! Task.Delay(delay)
+            
         | TextView txt -> do! client.SendTextMessageAsync(chatId, txt, replyMarkup=ReplyKeyboardRemove()) |> Task.ignore
         | ReplyView (text, buttons) ->
             let rows = buttons

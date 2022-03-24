@@ -75,6 +75,7 @@ namespace BotHost
         {
             var chat = Hook.UseChat();
 
+            yield return View.Typing(TimeSpan.FromSeconds(1));
             yield return View.Text($"Hello {chat.UserName}");
         }
     }

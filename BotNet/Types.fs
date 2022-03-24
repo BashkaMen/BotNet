@@ -49,6 +49,7 @@ and View =
     static member ContactHandler (text, handler: Func<string, IChatState>) =
         ContactHandlerView (text, fun txt -> ValueTask.FromResult(handler.Invoke(txt)))
    
+    static member Typing delay = TypingView(delay)
 
 module View =
     let text txt = TextView txt  
