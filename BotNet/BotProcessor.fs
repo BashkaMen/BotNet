@@ -5,6 +5,7 @@ open System.Threading
 open System.Threading.Tasks
 open BotNet
 open Microsoft.Extensions.DependencyInjection
+open Serilog
 
 
 type ChatUpdate =
@@ -51,19 +52,27 @@ type BotProcessor<'Update>(sp: IServiceProvider,
                   store: IChatStateStore) =
     
     
+    
+    
     member this.Handle(initState: IChatState) (update: 'Update) = task {
         match chatAdapter.ExtractUpdate update with
         | None -> return ()
         | Some (chat, update) ->
             
-        use scope = sp.CreateScope()
-        Hook.setContext scope.ServiceProvider chat
+        Hook.setContext sp chat
+        
+        let getState chatId = task {
+            try
+                return! store.Get(chatId) <?!> initState
+            with e ->
+                Log.Error(e, "Error while get state")
+                return initState
+        }
         
         let render = chatAdapter.AdaptView chat.Id
         let save = store.Save chat.Id
-        let getState = store.Get
         
-        let! state = getState chat.Id <?!> initState 
+        let! state = getState chat.Id 
         let view = state.GetView()
 
         

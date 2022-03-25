@@ -1,6 +1,7 @@
 ﻿namespace BotNet.Telegram
 
 open System
+open System.Collections.Concurrent
 open Telegram.Bot
 open BotNet
 open Telegram.Bot.Types.Enums
@@ -9,6 +10,9 @@ open System.Threading.Tasks
 
 
 type TelegramChatAdapter(client: ITelegramBotClient) =
+    let lastMessageId = ConcurrentDictionary<string, int>() 
+    
+    
     interface IChatAdapter<Telegram.Bot.Types.Update> with
         member this.AdaptView(ChatId chatId) (views) = task {
             let btnIndex =
@@ -16,6 +20,13 @@ type TelegramChatAdapter(client: ITelegramBotClient) =
                 fun () -> 
                     buttonOffset <- buttonOffset + 1
                     buttonOffset
+                    
+            match lastMessageId.TryGetValue(chatId) with
+            | true, msgId ->
+                do! client.DeleteMessageAsync(chatId, msgId)
+                ignore ^ lastMessageId.TryRemove(chatId)
+            | _ -> ()
+            
             
             for view in views do
                 match view with
@@ -24,7 +35,7 @@ type TelegramChatAdapter(client: ITelegramBotClient) =
                     do! client.SendChatActionAsync(chatId, ChatAction.Typing)
                     do! Task.Delay(delay)
                     
-                | TextView txt -> do! client.SendTextMessageAsync(chatId, txt, replyMarkup=ReplyKeyboardRemove()) |> Task.ignore
+                | TextView txt -> do! client.SendTextMessageAsync(chatId, txt, replyMarkup=ReplyKeyboardRemove(), parseMode=ParseMode.Markdown) |> Task.ignore
                 | ReplyView (text, buttons) ->
                     let rows = buttons
                                   |> Seq.map ^ fun btn -> InlineKeyboardButton.WithCallbackData(btn.Text, $"%i{btnIndex()}")
@@ -32,27 +43,26 @@ type TelegramChatAdapter(client: ITelegramBotClient) =
                                   |> Seq.map Seq.ofArray
                         
                     let reply = InlineKeyboardMarkup(rows);
-                    do! client.SendTextMessageAsync(chatId, text, replyMarkup=reply) |> Task.ignore
+                    let! msg = client.SendTextMessageAsync(chatId, text, replyMarkup=reply, parseMode=ParseMode.Markdown)
+                    ignore ^ lastMessageId.AddOrUpdate(chatId, msg.MessageId, fun key old -> msg.MessageId)
+                    
                 
                 | TextHandlerView f -> ()
                 | ContactHandlerView (txt, f) ->
                     let reply = ReplyKeyboardMarkup(KeyboardButton.WithRequestContact("Contact"))
                     reply.OneTimeKeyboard <- true
-                    do! client.SendTextMessageAsync(chatId, txt, replyMarkup=reply) |> Task.ignore
+                    do! client.SendTextMessageAsync(chatId, txt, replyMarkup=reply, parseMode=ParseMode.Markdown) |> Task.ignore
         }
             
             
         member this.ExtractUpdate(upd) = 
-            let inline ( <|> ) str def =
-                if String.IsNullOrEmpty(str)
-                then def
-                else str
+            let fixStr str = if String.IsNullOrEmpty(str) then "" else str
                 
             let inline extract (x: ^a) = {
                 Id = (^a : (member Id : int64)x) |> (string >> ChatId)
-                FirstName = (^a : (member FirstName : string)x) <|> ""
-                LastName = (^a : (member LastName : string)x) <|> ""
-                UserName = (^a : (member Username : string)x) <|> ""
+                FirstName = fixStr (^a : (member FirstName : string)x) 
+                LastName = fixStr (^a : (member LastName : string)x) 
+                UserName = fixStr (^a : (member Username : string)x) 
             }
             
             match upd.Type with
@@ -60,14 +70,14 @@ type TelegramChatAdapter(client: ITelegramBotClient) =
                 let msg = upd.Message
                 let chat = extract msg.Chat
                 match msg.Type with
-                | MessageType.Text -> Some (chat, Text msg.Text)
-                | MessageType.Contact -> Some (chat, Contact msg.Contact.PhoneNumber)
+                | MessageType.Text -> Some (chat, Text ^ fixStr msg.Text)
+                | MessageType.Contact -> Some (chat, Contact ^ fixStr msg.Contact.PhoneNumber)
                 | _ -> None
             
             | UpdateType.CallbackQuery ->
                 let callBack = upd.CallbackQuery
                 let chat = extract upd.CallbackQuery.From
-                Some (chat, Callback callBack.Data)
+                Some (chat, Callback ^ fixStr callBack.Data)
 
             | _ -> None
 

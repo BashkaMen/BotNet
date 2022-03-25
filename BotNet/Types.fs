@@ -25,17 +25,23 @@ and View =
         |> Option.map TextView
         <?> EmptyView
         
-        
     static member Text(txt, predicate : Func<string, bool>) =
         match predicate.Invoke(txt) with
         | false -> EmptyView
         | true -> View.Text txt
         
+        
+    static member Buttons(message, buttons, handler: Func<_, ValueTask<IChatState>>) =
+        buttons
+        |> Seq.map ^ fun x -> { Text = x.ToString(); Callback = fun () -> handler.Invoke(x) }
+        |> fun keyboard -> ReplyView(message, Seq.toList keyboard)
+    
     static member Buttons(message, keyboard: Dictionary<string, Func<ValueTask<IChatState>>>) =
         keyboard
         |> Seq.map ^ fun x -> { Text = x.Key; Callback = fun () -> x.Value.Invoke() }
-        |> Seq.toList
-        |> fun keyboard -> ReplyView(message, keyboard)
+        |> fun keyboard -> ReplyView(message, Seq.toList keyboard)
+        
+    
         
     static member TextHandler (handler: Func<string, ValueTask<IChatState>>) =
         TextHandlerView handler.Invoke
