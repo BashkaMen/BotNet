@@ -3,7 +3,7 @@ namespace BotNet
 open System.Collections.Generic
 open BotNet
 
-type InMemoryStore() =
+type InMemoryChatStore() =
     let cache = Dictionary()
     
     interface IChatStateStore with

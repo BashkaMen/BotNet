@@ -1,6 +1,6 @@
 ﻿using BotNet;
+using BotNet.Telegram;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.FSharp.Core;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 
@@ -101,10 +101,8 @@ namespace BotHost
             var services = new ServiceCollection();
 
             services.AddSingleton<ITelegramBotClient>(new TelegramBotClient(Environment.GetEnvironmentVariable("TG_TOKEN")!));
-            
-            
-            services.AddSingleton<IChatStateStore, InMemoryStore>();
-            services.AddTransient<IChatAdapter<Update>, TelegramAdapter.ChatAdapter>();
+            services.AddSingleton<IChatStateStore, InMemoryChatStore>();
+            services.AddTransient<IChatAdapter<Update>, TelegramChatAdapter>();
             services.AddTransient<BotProcessor<Update>>();
             
             var provider = services.BuildServiceProvider();

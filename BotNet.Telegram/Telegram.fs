@@ -1,14 +1,14 @@
-module BotNet.TelegramAdapter
+﻿namespace BotNet.Telegram
 
 open System
-open BotNet
 open Telegram.Bot
+open BotNet
 open Telegram.Bot.Types.Enums
 open Telegram.Bot.Types.ReplyMarkups
 open System.Threading.Tasks
 
 
-type ChatAdapter(client: ITelegramBotClient) =
+type TelegramChatAdapter(client: ITelegramBotClient) =
     interface IChatAdapter<Telegram.Bot.Types.Update> with
         member this.AdaptView(ChatId chatId) (views) = task {
             let btnIndex =
@@ -70,4 +70,6 @@ type ChatAdapter(client: ITelegramBotClient) =
                 Some (chat, Callback callBack.Data)
 
             | _ -> None
+
+
 
