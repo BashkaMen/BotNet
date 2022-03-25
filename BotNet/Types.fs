@@ -20,6 +20,8 @@ and View =
     | TextHandlerView of (string -> ValueTask<IChatState>)
     | ContactHandlerView of string * (string -> ValueTask<IChatState>)
     
+    
+    
     static member Text txt =
         Option.ofObj txt
         |> Option.map TextView
@@ -84,7 +86,6 @@ module View =
         |> Seq.collect id
         |> Seq.toList
         
-    
     
     
 
