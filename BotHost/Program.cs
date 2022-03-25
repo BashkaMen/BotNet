@@ -115,7 +115,7 @@ namespace BotHost
             telegram.StartReceiving(
                 async (bot, update, token) =>
                 {
-                    await processor.Handle(initState, update);
+                    await processor.Handle(initState, initState, update);
                 },
                 (bot, ex, token) => Task.CompletedTask);
 
