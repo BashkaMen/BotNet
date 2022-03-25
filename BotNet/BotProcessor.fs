@@ -51,10 +51,7 @@ type BotProcessor<'Update>(sp: IServiceProvider,
                   chatAdapter: IChatAdapter<'Update>,
                   store: IChatStateStore) =
     
-    
-    
-    
-    member this.Handle(initState: IChatState) (update: 'Update) = task {
+    let handle (initState: IChatState) (update: 'Update) = task {
         match chatAdapter.ExtractUpdate update with
         | None -> return ()
         | Some (chat, update) ->
@@ -71,18 +68,17 @@ type BotProcessor<'Update>(sp: IServiceProvider,
         
         let render = chatAdapter.AdaptView chat.Id
         let save = store.Save chat.Id
-        
         let! state = getState chat.Id 
-        let view = state.GetView()
 
-        
+
         let runHandler (handler: ('a -> ValueTask<IChatState>) option) (arg: 'a) = task {
             match handler with
             | Some f -> return! f arg
             | None -> return state
         }
         
-        let! newState = 
+        let! newState =
+            let view = state.GetView()
             match update with
             | Text txt when txt = "/start" -> Task.FromResult initState
             | Text txt -> runHandler (View.getTextHandler view) txt
@@ -94,4 +90,10 @@ type BotProcessor<'Update>(sp: IServiceProvider,
         
         do! render ^ newState.GetView()
         do! save newState
+    }
+    
+    
+    member this.Handle(initState: IChatState) (update: 'Update) = task {
+        try do! handle initState update
+        with e -> Log.Error(e, "Error in bot states")
     }
