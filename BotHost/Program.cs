@@ -1,22 +1,25 @@
 ﻿using BotNet;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.FSharp.Core;
 using Telegram.Bot;
+using Telegram.Bot.Types;
 
 namespace BotHost
 {
-    public record TestState() : IChatState
+    public record GetNameState(string Name) : IChatState
     {
         public IEnumerable<View> GetView()
         {
             yield return View.Text("What is your name?");
-            yield return View.TextHandler(msg => new GreetState(msg));
+            yield return View.TextHandler(msg => new PrintState(msg));
         }
     }
 
-    public record GreetState(string Name) : IChatState
+    public record PrintState(string Text) : IChatState
     {
         public IEnumerable<View> GetView()
         {
-            yield return View.Text($"Hello {Name}!");
+            yield return View.Text(Text);
         }
     }
 
@@ -81,22 +84,40 @@ namespace BotHost
     }
 
 
+    public record ContactState() : IChatState
+    {
+        public IEnumerable<View> GetView()
+        {
+            yield return View.ContactHandler("Please share you contact", contact => new PrintState(contact));
+        }
+    }
+
+
     public class Program
     {
         [STAThread]
         public static void Main()
         {
-            var telegram = new TelegramBotClient(Environment.GetEnvironmentVariable("TG_TOKEN")!);
+            var services = new ServiceCollection();
 
-            var (saveState, getState) = Store.inMemory(new Dictionary<ChatId, IChatState>());
-            var viewAdapter = TelegramAdapter.view(telegram);
-            var updateAdapter = TelegramAdapter.update;
-            var initState = new ChatHookState();
+            services.AddSingleton<ITelegramBotClient>(new TelegramBotClient(Environment.GetEnvironmentVariable("TG_TOKEN")!));
+            
+            
+            services.AddSingleton<IChatStateStore, InMemoryStore>();
+            services.AddTransient<IChatAdapter<Update>, TelegramAdapter.ChatAdapter>();
+            services.AddTransient<BotProcessor<Update>>();
+            
+            var provider = services.BuildServiceProvider();
+
+            var telegram = provider.GetRequiredService<ITelegramBotClient>();
+            var processor = provider.GetRequiredService<BotProcessor<Update>>();
+
+            var initState = new ContactState();
 
             telegram.StartReceiving(
                 async (bot, update, token) =>
                 {
-                    await BotProcessor.handleUpdate(saveState, getState, viewAdapter, updateAdapter, initState, update);
+                    await processor.Handle(initState, update);
                 },
                 (bot, ex, token) => Task.CompletedTask);
 

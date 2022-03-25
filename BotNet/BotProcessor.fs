@@ -1,9 +1,10 @@
 namespace BotNet
 
+open System
 open System.Threading
 open System.Threading.Tasks
 open BotNet
-
+open Microsoft.Extensions.DependencyInjection
 
 
 type ChatUpdate =
@@ -12,46 +13,55 @@ type ChatUpdate =
     | Callback of string
 
 
-type SaveChatState = SaveChatState of (ChatId -> IChatState -> Task)
-type GetChatState = GetChatState of  (ChatId -> Task<IChatState option>)
-type ViewAdapter = ViewAdapter of (ChatId -> View seq -> Task)
-type UpdateAdapter<'update> = UpdateAdapter of ('update -> Option<Chat * ChatUpdate>)  
+type IChatStateStore =
+    abstract Save : ChatId -> IChatState -> Task
+    abstract Get  : ChatId -> Task<IChatState option>
+    
+type IChatAdapter<'Update> =
+    abstract ExtractUpdate : 'Update -> Option<Chat * ChatUpdate> 
+    abstract AdaptView : ChatId -> View seq -> Task
+
 
 
 module Hook =
+    
     type private ChatContext = {
+        ServiceProvider: IServiceProvider
         Chat: Chat
     }
     
     let private context = AsyncLocal<ChatContext>()
     
-    let setContext chat =
+    let setContext serviceProvider chat =
         context.Value <- {
+            ServiceProvider = serviceProvider
             Chat = chat
         }
         
     
     [<CompiledName "UseChat">]
-    let useChat() = context.Value.Chat 
+    let useChat() = context.Value.Chat
+    
+    [<CompiledName "Resolve">]
+    let resolve<'t> = context.Value.ServiceProvider.GetRequiredService<'t>()
 
 
-module BotProcessor =
-
-    let handleUpdate (SaveChatState save)
-                     (GetChatState getState)
-                     (ViewAdapter adaptView)
-                     (UpdateAdapter mapUpdate)
-                     (initState: IChatState)
-                     (update: 'Update) = task {
-        
-        match mapUpdate update with
+type BotProcessor<'Update>(sp: IServiceProvider,
+                  chatAdapter: IChatAdapter<'Update>,
+                  store: IChatStateStore) =
+    
+    
+    member this.Handle(initState: IChatState) (update: 'Update) = task {
+        match chatAdapter.ExtractUpdate update with
         | None -> return ()
         | Some (chat, update) ->
             
-        Hook.setContext chat
+        use scope = sp.CreateScope()
+        Hook.setContext scope.ServiceProvider chat
         
-        let render = adaptView chat.Id
-        let save = save chat.Id
+        let render = chatAdapter.AdaptView chat.Id
+        let save = store.Save chat.Id
+        let getState = store.Get
         
         let! state = getState chat.Id <?!> initState 
         let view = state.GetView()
