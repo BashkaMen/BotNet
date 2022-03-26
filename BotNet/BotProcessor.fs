@@ -47,11 +47,12 @@ module Hook =
     let resolve<'t> = context.Value.ServiceProvider.GetRequiredService<'t>()
 
 
+
 type BotProcessor<'Update>(sp: IServiceProvider,
                   chatAdapter: IChatAdapter<'Update>,
                   store: IChatStateStore) =
     
-    let handle (initState: IChatState) (errorState: IChatState) (update: 'Update) = task {
+    let handle (initState: IChatState) (errorState: exn -> Task<IChatState>) (update: 'Update) = task {
         match chatAdapter.ExtractUpdate update with
         | None -> return ()
         | Some (chat, update) ->
@@ -59,17 +60,13 @@ type BotProcessor<'Update>(sp: IServiceProvider,
         Hook.setContext sp chat
         
         let getState chatId = task {
-            try
-                return! store.Get(chatId) <?!> initState
-            with e ->
-                Log.Error(e, "Error while get state")
-                return initState
+            try return! store.Get(chatId) <?!> initState
+            with e -> return! errorState e
         }
         
         let render = chatAdapter.AdaptView chat.Id
         let save = store.Save chat.Id
         let! state = getState chat.Id 
-
 
         let runHandler (handler: ('a -> ValueTask<IChatState>) option) (arg: 'a) = task {
             match handler with
@@ -88,14 +85,14 @@ type BotProcessor<'Update>(sp: IServiceProvider,
                     let findButton index = view |> View.getButtons |> Seq.tryItem index
                     let callBack = query |> Int32.tryParse |> Option.bind findButton |> Option.map ^ fun x -> x.Callback
                     runHandler callBack ()
-            with e -> Task.FromResult errorState
+            with e -> errorState e
         
         do! render ^ newState.GetView()
         do! save newState
     }
     
     
-    member this.Handle (initState: IChatState) errorState (update: 'Update) = task {
-        try do! handle initState errorState update
+    member this.Handle (initState: IChatState) (errorHandler: Func<exn, Task<IChatState>>) (update: 'Update) = task {
+        try do! handle initState errorHandler.Invoke update
         with e -> Log.Error(e, "Error in bot states")
     }

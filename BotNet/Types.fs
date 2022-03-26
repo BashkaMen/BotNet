@@ -4,6 +4,7 @@ open System
 open System.Collections.Generic
 open System.Threading.Tasks
 
+
 [<Struct>] type ChatId = ChatId of string
 type Chat = { Id: ChatId; UserName: string; FirstName: string; LastName: string } 
 type ReplyButton = { Text: string; Callback: unit -> ValueTask<IChatState> }
@@ -32,16 +33,17 @@ and View =
         | false -> EmptyView
         | true -> View.Text txt
         
-        
+    
+    static member private ofKeyboard message keys = ReplyView(message, Seq.toList keys)  
     static member Buttons(message, buttons, handler: Func<_, ValueTask<IChatState>>) =
         buttons
         |> Seq.map ^ fun x -> { Text = x.ToString(); Callback = fun () -> handler.Invoke(x) }
-        |> fun keyboard -> ReplyView(message, Seq.toList keyboard)
+        |> View.ofKeyboard message
     
     static member Buttons(message, keyboard: Dictionary<string, Func<ValueTask<IChatState>>>) =
         keyboard
         |> Seq.map ^ fun x -> { Text = x.Key; Callback = fun () -> x.Value.Invoke() }
-        |> fun keyboard -> ReplyView(message, Seq.toList keyboard)
+        |> View.ofKeyboard message
         
     
         

@@ -111,11 +111,12 @@ namespace BotHost
             var processor = provider.GetRequiredService<BotProcessor<Update>>();
 
             var initState = new ContactState();
+            
 
             telegram.StartReceiving(
                 async (bot, update, token) =>
                 {
-                    await processor.Handle(initState, initState, update);
+                    await processor.Handle(initState, async ex => initState, update);
                 },
                 (bot, ex, token) => Task.CompletedTask);
 
