@@ -18,6 +18,11 @@ module Prelude
             else Some x
     
         
+        let inline ofTryPattern x =
+            match x with
+            | true, x -> Some x
+            | _ -> None
+            
     
     module Int32 =
         let tryParse (s: string) =

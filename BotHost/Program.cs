@@ -27,8 +27,13 @@ namespace BotHost
     {
         public IEnumerable<View> GetView()
         {
-            yield return View.Text(Reply); 
-            yield return View.Buttons($"Counter: {Counter}",
+            var lines = new[]
+            {
+                Reply,
+                $"Counter: {Counter}"
+            };
+            
+            yield return View.Buttons(lines,
                 new()
                 {
                     { $"Increment by {Step}", () => ChangeCounter(Step) },
@@ -102,7 +107,7 @@ namespace BotHost
 
             services.AddSingleton<ITelegramBotClient>(new TelegramBotClient(Environment.GetEnvironmentVariable("TG_TOKEN")!));
             services.AddSingleton<IChatStateStore, InMemoryChatStore>();
-            services.AddTransient<IChatAdapter<Update>, TelegramChatAdapter>();
+            services.AddSingleton<IChatAdapter<Update>, TelegramChatAdapter>();
             services.AddTransient<BotProcessor<Update>>();
             
             var provider = services.BuildServiceProvider();
@@ -110,7 +115,7 @@ namespace BotHost
             var telegram = provider.GetRequiredService<ITelegramBotClient>();
             var processor = provider.GetRequiredService<BotProcessor<Update>>();
 
-            var initState = new ContactState();
+            var initState = new CounterState();
             
 
             telegram.StartReceiving(

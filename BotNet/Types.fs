@@ -45,6 +45,15 @@ and View =
         |> Seq.map ^ fun x -> { Text = x.Key; Callback = fun () -> x.Value.Invoke() }
         |> View.ofKeyboard message
         
+    static member Buttons(lines: string seq, keyboard: Dictionary<string, Func<ValueTask<IChatState>>>) =
+        let message = lines
+                      |> Seq.filter (not << String.IsNullOrEmpty)
+                      |> String.concat "\n"
+        
+        keyboard
+        |> Seq.map ^ fun x -> { Text = x.Key; Callback = fun () -> x.Value.Invoke() }
+        |> View.ofKeyboard message
+        
     
         
     static member TextHandler (handler: Func<string, ValueTask<IChatState>>) =

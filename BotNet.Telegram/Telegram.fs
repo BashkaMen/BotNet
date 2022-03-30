@@ -2,6 +2,7 @@
 
 open System
 open System.Collections.Concurrent
+open Serilog
 open Telegram.Bot
 open BotNet
 open Telegram.Bot.Types.Enums
@@ -12,7 +13,6 @@ open System.Threading.Tasks
 type TelegramChatAdapter(client: ITelegramBotClient) =
     let lastMessageId = ConcurrentDictionary<string, int>()
     
-    
     interface IChatAdapter<Telegram.Bot.Types.Update> with
         member this.AdaptView(ChatId chatId) (views) = task {
             let btnIndex =
@@ -21,41 +21,57 @@ type TelegramChatAdapter(client: ITelegramBotClient) =
                     buttonOffset <- buttonOffset + 1
                     buttonOffset
                 
+            let logError (tValue: Task) = task {
+                try
+                    do! tValue
+                with e -> Log.Error("Error while send telegram request")
+            }
             let append msgId = lastMessageId.AddOrUpdate(chatId, msgId, (fun key old -> msgId)) |> ignore
-                    
-            match lastMessageId.TryGetValue(chatId) with
-            | true, msgId ->
-                do! client.DeleteMessageAsync(chatId, msgId)
-                ignore ^ lastMessageId.TryRemove(chatId)
-            | _ -> ()
+            let clear () = lastMessageId.TryRemove(chatId) |> ignore
+            let lastMsg() = lastMessageId.TryGetValue(chatId) |> Option.ofTryPattern
             
+            let sendTyping (delay: TimeSpan) = logError ^ task {
+                do! client.SendChatActionAsync(chatId, ChatAction.Typing)
+                do! Task.Delay(delay)
+            }
+            
+            let sendText txt = logError ^ task {
+                do! client.SendTextMessageAsync(chatId, txt, replyMarkup=ReplyKeyboardRemove(), parseMode=ParseMode.Html) |> Task.ignore
+                clear()
+            }
+            
+
+            let sendKeyboard txt buttons = logError ^ task {
+                let rows = buttons
+                           |> Seq.map ^ fun btn -> InlineKeyboardButton.WithCallbackData(btn.Text, $"%i{btnIndex()}")
+                           |> Seq.chunkBySize 3
+                           |> Seq.map Seq.ofArray
+                        
+                let reply = InlineKeyboardMarkup(rows);
+                
+                match lastMsg() with
+                | None ->
+                    let! msg = client.SendTextMessageAsync(chatId, txt, replyMarkup=reply, parseMode=ParseMode.Html) 
+                    append msg.MessageId
+                | Some msgId ->
+                    let! msg = client.EditMessageTextAsync(chatId, msgId, txt, replyMarkup=reply, parseMode=ParseMode.Html)
+                    append msg.MessageId
+            }
+            
+            let sendContact txt = logError ^ task {
+                let reply = ReplyKeyboardMarkup(KeyboardButton.WithRequestContact("Contact"))
+                reply.OneTimeKeyboard <- true
+                do! client.SendTextMessageAsync(chatId, txt, replyMarkup=reply, parseMode=ParseMode.Html) |> Task.ignore
+            }
             
             for view in views do
                 match view with
                 | EmptyView -> ()
-                | TypingView delay ->
-                    do! client.SendChatActionAsync(chatId, ChatAction.Typing)
-                    do! Task.Delay(delay)
-                    
-                | TextView txt ->
-                    do! client.SendTextMessageAsync(chatId, txt, replyMarkup=ReplyKeyboardRemove(), parseMode=ParseMode.Html) |> Task.ignore
-                    
-                | ReplyView (text, buttons) ->
-                    let rows = buttons
-                                  |> Seq.map ^ fun btn -> InlineKeyboardButton.WithCallbackData(btn.Text, $"%i{btnIndex()}")
-                                  |> Seq.chunkBySize 3
-                                  |> Seq.map Seq.ofArray
-                        
-                    let reply = InlineKeyboardMarkup(rows);
-                    let! msg = client.SendTextMessageAsync(chatId, text, replyMarkup=reply, parseMode=ParseMode.Html)
-                    append msg.MessageId
-                
+                | TypingView delay -> do! sendTyping delay
+                | TextView txt -> do! sendText txt
+                | ReplyView (text, buttons) -> do! sendKeyboard text buttons
                 | TextHandlerView f -> ()
-                | ContactHandlerView (txt, f) ->
-                    let reply = ReplyKeyboardMarkup(KeyboardButton.WithRequestContact("Contact"))
-                    reply.OneTimeKeyboard <- true
-                    do! client.SendTextMessageAsync(chatId, txt, replyMarkup=reply, parseMode=ParseMode.Html) |> Task.ignore
-                    
+                | ContactHandlerView (txt, f) -> do! sendContact txt
         }
             
             
