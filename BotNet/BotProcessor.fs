@@ -87,6 +87,8 @@ type BotProcessor<'Update>(sp: IServiceProvider,
                     runHandler callBack ()
             with e -> errorState e
         
+        
+        Log.Information("Changed state {ChatId} {FromState} -> {ToState}", chat.Id, state, newState)
         do! render ^ newState.GetView()
         do! save newState
     }
