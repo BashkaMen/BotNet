@@ -47,14 +47,19 @@ type TelegramChatAdapter(client: ITelegramBotClient) =
                            |> Seq.chunkBySize 3
                            |> Seq.map Seq.ofArray
                         
-                let reply = InlineKeyboardMarkup(rows);
+                let reply = InlineKeyboardMarkup(rows)
                 
+                let replaceOrSend (msgId: int) = task {
+                    try return! client.EditMessageTextAsync(chatId, msgId, txt, replyMarkup=reply, parseMode=ParseMode.Html)
+                    with e -> return! client.SendTextMessageAsync(chatId, txt, replyMarkup=reply, parseMode=ParseMode.Html)
+                }
+                    
                 match lastMsg() with
                 | None ->
                     let! msg = client.SendTextMessageAsync(chatId, txt, replyMarkup=reply, parseMode=ParseMode.Html) 
                     append msg.MessageId
                 | Some msgId ->
-                    let! msg = client.EditMessageTextAsync(chatId, msgId, txt, replyMarkup=reply, parseMode=ParseMode.Html)
+                    let! msg = replaceOrSend msgId
                     append msg.MessageId
             }
             
