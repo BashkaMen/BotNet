@@ -24,7 +24,7 @@ type TelegramChatAdapter(client: ITelegramBotClient) =
             let logError (tValue: Task) = task {
                 try
                     do! tValue
-                with e -> Log.Error("Error while send telegram request")
+                with e -> Log.Error(e, "Error while send telegram request")
             }
             let append msgId = lastMessageId.AddOrUpdate(chatId, msgId, (fun key old -> msgId)) |> ignore
             let clear () = lastMessageId.TryRemove(chatId) |> ignore
