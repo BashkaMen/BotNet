@@ -57,6 +57,8 @@ type BotProcessor<'Update>(sp: IServiceProvider,
         | None -> return ()
         | Some (chat, update) ->
             
+        Log.Information("Received update {Update} on {Chat}", update, chat)
+            
         Hook.setContext sp chat
         
         let getState chatId = task {
