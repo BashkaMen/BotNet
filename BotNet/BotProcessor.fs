@@ -19,8 +19,9 @@ type IChatStateStore =
     abstract Get  : ChatId -> Task<IChatState option>
     
 type IChatAdapter<'Update> =
-    abstract ExtractUpdate : 'Update -> Option<Chat * ChatUpdate> 
+    abstract ExtractUpdate : 'Update -> Option<Chat * User * ChatUpdate> 
     abstract AdaptView : ChatId -> View seq -> Task
+    abstract ResetChat : ChatId -> Task  
 
 
 
@@ -29,14 +30,16 @@ module Hook =
     type private ChatContext = {
         ServiceProvider: IServiceProvider
         Chat: Chat
+        Sender: User
     }
     
     let private context = AsyncLocal<ChatContext>()
     
-    let setContext serviceProvider chat =
+    let setContext serviceProvider chat sender =
         context.Value <- {
             ServiceProvider = serviceProvider
             Chat = chat
+            Sender = sender
         }
         
     
@@ -45,6 +48,9 @@ module Hook =
     
     [<CompiledName "Resolve">]
     let resolve<'t> = context.Value.ServiceProvider.GetRequiredService<'t>()
+    
+    [<CompiledName "UseSender">]
+    let useSender() = context.Value.Sender
 
 
 
@@ -55,11 +61,11 @@ type BotProcessor<'Update>(sp: IServiceProvider,
     let handle (initState: IChatState) (errorState: exn -> Task<IChatState>) (update: 'Update) = task {
         match chatAdapter.ExtractUpdate update with
         | None -> return ()
-        | Some (chat, update) ->
+        | Some (chat, user, update) ->
             
         Log.Information("Received update {Update} on {Chat}", update, chat)
             
-        Hook.setContext sp chat
+        Hook.setContext sp chat user
         
         let getState chatId = task {
             try return! store.Get(chatId) <?!> initState
@@ -99,4 +105,11 @@ type BotProcessor<'Update>(sp: IServiceProvider,
     member this.Handle (initState: IChatState) (errorHandler: Func<exn, Task<IChatState>>) (update: 'Update) = task {
         try do! handle initState errorHandler.Invoke update
         with e -> Log.Error(e, "Error in bot states")
+    }
+    
+    
+    member this.SetState (chatId) (state: IChatState) = task {
+        do! chatAdapter.ResetChat chatId
+        do! chatAdapter.AdaptView chatId (state.GetView())
+        do! store.Save chatId state
     }
