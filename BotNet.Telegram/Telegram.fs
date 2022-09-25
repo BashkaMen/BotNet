@@ -2,6 +2,7 @@
 
 open System
 open System.Collections.Concurrent
+open RateLimiter
 open Serilog
 open Telegram.Bot
 open BotNet
@@ -11,7 +12,16 @@ open System.Threading.Tasks
 
 
 type TelegramChatAdapter(client: ITelegramBotClient) =
+    let limiter = ConcurrentDictionary<string, TimeLimiter>()
     let lastMessageId = ConcurrentDictionary<string, int>()
+    
+    let globalLimiter = TimeLimiter.GetFromMaxCountByInterval(30, TimeSpan.FromSeconds(1))
+    let limiter (chatId) = limiter.GetOrAdd(chatId, fun _ -> TimeLimiter.GetFromMaxCountByInterval(1, TimeSpan.FromSeconds(1)))
+    
+    let waitLimit chatId = task {
+        do! globalLimiter.Enqueue(fun () -> ())
+        do! (limiter chatId).Enqueue(fun () -> ())
+    }
     
     interface IChatAdapter<Telegram.Bot.Types.Update> with
         member this.AdaptView(ChatId chatId) (views) = task {
@@ -20,7 +30,8 @@ type TelegramChatAdapter(client: ITelegramBotClient) =
                 fun () -> 
                     buttonOffset <- buttonOffset + 1
                     buttonOffset
-                
+            
+            
             let logError (tValue: Task) = task {
                 try
                     do! tValue
@@ -35,6 +46,7 @@ type TelegramChatAdapter(client: ITelegramBotClient) =
                     
             
             let sendTyping (delay: TimeSpan) = logError ^ task {
+                do! waitLimit chatId
                 do! client.SendChatActionAsync(chatId, ChatAction.Typing)
                 do! Task.Delay(delay)
             }
@@ -50,11 +62,13 @@ type TelegramChatAdapter(client: ITelegramBotClient) =
             
             
             let sendMessage txt buttons = logError ^ task {
+                do! waitLimit chatId
                 let! msg = client.SendTextMessageAsync(chatId, txt, replyMarkup=mkKeyboard buttons, parseMode=ParseMode.Html)
                 append msg
             }
             
             let editMessage msgId txt buttons = logError ^ task {
+                do! waitLimit chatId
                 let! msg = client.EditMessageTextAsync(Types.ChatId(chatId), msgId, txt, parseMode=ParseMode.Html, replyMarkup=mkKeyboard buttons)
                 append msg
             }
@@ -65,7 +79,6 @@ type TelegramChatAdapter(client: ITelegramBotClient) =
                 | Some msgId ->
                     try
                         do! editMessage msgId txt reply
-                        
                     with e -> Log.Error(e, "Error while edit message")
                 | None -> do! sendMessage txt reply
             }
@@ -73,6 +86,7 @@ type TelegramChatAdapter(client: ITelegramBotClient) =
             let sendContact txt = logError ^ task {
                 let reply = ReplyKeyboardMarkup(KeyboardButton.WithRequestContact("Contact"))
                 reply.OneTimeKeyboard <- true
+                do! waitLimit chatId
                 let! msg = client.SendTextMessageAsync(chatId, txt, replyMarkup=reply, parseMode=ParseMode.Html)
                 append msg
             }
@@ -93,18 +107,18 @@ type TelegramChatAdapter(client: ITelegramBotClient) =
         member this.ExtractUpdate(upd) = 
             let fixStr str = if String.IsNullOrEmpty(str) then "" else str
                 
-            let inline extract (x: ^a) = {
-                Id = (^a : (member Id : int64)x) |> (string >> ChatId)
-                FirstName = fixStr (^a : (member FirstName : string)x) 
-                LastName = fixStr (^a : (member LastName : string)x) 
-                UserName = fixStr (^a : (member Username : string)x) 
+            let fromUser (x: Telegram.Bot.Types.User) = {
+                Id = x.Id |> (string >> UserId)
+                FirstName = fixStr x.FirstName
+                LastName = fixStr x.LastName
+                UserName = fixStr x.Username
             }
             
             match upd.Type with
             | UpdateType.Message ->
                 let msg = upd.Message
                 let chat = { Id = ChatId (msg.Chat.Id.ToString()); Title = msg.Chat.Title } 
-                let user = extract msg.From
+                let user = fromUser msg.From
                 match msg.Type with
                 | MessageType.Text -> Some (chat, user, Text ^ fixStr msg.Text)
                 | MessageType.Contact -> Some (chat, user, Contact ^ fixStr msg.Contact.PhoneNumber)
@@ -113,8 +127,8 @@ type TelegramChatAdapter(client: ITelegramBotClient) =
             | UpdateType.CallbackQuery ->
                 let callBack = upd.CallbackQuery
                 let chat = { Id = ChatId (callBack.Message.Chat.Id.ToString()); Title = callBack.Message.Chat.Title }
-                let user = extract callBack.From
-                Some (chat, user, Callback ^ fixStr callBack.Data)
+                let user = fromUser callBack.From
+                Some (chat, user, Callback ^ { Id = callBack.Id; Data = fixStr callBack.Data })
 
             | _ -> None
 

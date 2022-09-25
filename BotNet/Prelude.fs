@@ -1,6 +1,6 @@
 ﻿[<AutoOpen>]
 module Prelude
-
+    open FSharpx
     open System
     open System.Threading.Tasks
 
@@ -23,6 +23,12 @@ module Prelude
             | true, x -> Some x
             | _ -> None
             
+            
+        let inline ( >>= ) x f =
+            match x with
+            | Some x -> f x
+            | None -> None
+            
     
     module Int32 =
         let tryParse (s: string) =
@@ -36,3 +42,4 @@ module Prelude
             let! _ = t
             return ()
         }
+

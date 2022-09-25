@@ -11,9 +11,11 @@
         <Compile Include="Types.fs" />
         <Compile Include="BotProcessor.fs" />
         <Compile Include="Store.fs" />
+        <Compile Include="ChatDsl.fs" />
     </ItemGroup>
 
     <ItemGroup>
+      <PackageReference Include="FSharpx.Extras" Version="3.1.0" />
       <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="6.0.0" />
       <PackageReference Include="Serilog" Version="2.10.0" />
     </ItemGroup>
